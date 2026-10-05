@@ -1,0 +1,705 @@
+/* Mobile layout.
+ *
+ * Phones and tablets get `html.mobile` from initMobileLayout() in conference.js
+ * (touch-first detection, or ?layout=mobile to force it). Every rule here is
+ * scoped under that class, so desktop -- including a narrow desktop window,
+ * which still uses the max-width rules in styles.css -- is untouched.
+ *
+ * Stacking, for anything added later: the header is z 100 and the options
+ * sheet lives inside it, so the dock sits below at 90; the chat sheet covers
+ * the header at 150; an open tile action sheet goes over everything at 1001,
+ * above its backdrop at 1000.
+ */
+
+/* Desktop never shows the image picker: it pastes. */
+.chat-attach-btn {
+    display: none;
+}
+
+html.mobile {
+    --dock-btn: min(48px, 13vw);
+    --dock-h: calc(var(--dock-btn) + 16px);
+    --sat: env(safe-area-inset-top, 0px);
+    --sar: env(safe-area-inset-right, 0px);
+    --sab: env(safe-area-inset-bottom, 0px);
+    --sal: env(safe-area-inset-left, 0px);
+}
+
+/* Controls toggled with the hidden attribute would otherwise be shown again by
+   any rule that sets display -- .control-btn is display:flex. */
+html.mobile [hidden],
+html.mobile .desktop-only {
+    display: none !important;
+}
+
+/* 100vh is the height with the browser toolbar retracted, so a 100vh page is
+   taller than what is actually on screen. dvh tracks the real visible height. */
+html.mobile body {
+    min-height: 100vh;
+    min-height: 100dvh;
+}
+
+html.mobile .container {
+    height: 100vh;
+    height: 100dvh;
+}
+
+html.mobile button,
+html.mobile .video-container {
+    touch-action: manipulation; /* no double-tap zoom, no 300ms click delay */
+    -webkit-tap-highlight-color: transparent;
+}
+
+/* ── Header ─────────────────────────────────────────────────────────────── */
+
+html.mobile .header {
+    padding-top: calc(10px + var(--sat));
+    padding-left: max(12px, var(--sal));
+    padding-right: max(12px, var(--sar));
+}
+
+/* In a call the header is just the wordmark: everything it used to hold is in
+   the dock or the options sheet. */
+html.mobile .room-info,
+html.mobile .bottom-controls {
+    display: none !important;
+}
+
+html.mobile.in-call .header {
+    padding-top: calc(4px + var(--sat));
+    padding-bottom: 4px;
+    justify-content: center;
+    flex-wrap: nowrap;
+}
+
+html.mobile.in-call .header-banner {
+    max-width: 120px;
+}
+
+/* ── Status bar ─────────────────────────────────────────────────────────── */
+
+/* While connected the status bar is noise on a small screen; when something is
+   wrong it floats over the top of the call as a pill instead. */
+html.mobile.in-call .status-bar:not(.error) {
+    display: none;
+}
+
+html.mobile.in-call .status-bar.error {
+    position: fixed;
+    top: calc(8px + var(--sat));
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 120;
+    width: auto;
+    max-width: calc(100vw - 24px);
+    padding: 6px 14px;
+    font-size: 11px;
+    border: 1px solid var(--danger);
+    border-radius: 14px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+html.mobile .status-bar {
+    padding-bottom: calc(6px + var(--sab));
+}
+
+html.mobile .transport-badge,
+html.mobile .status-footer {
+    display: none;
+}
+
+/* ── Dock ───────────────────────────────────────────────────────────────── */
+
+html.mobile .conference-screen {
+    padding-bottom: 0; /* styles.css reserves room for the old fixed bar */
+}
+
+html.mobile .mobile-dock {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 90;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: clamp(6px, 2.5vw, 18px);
+    padding: 8px max(8px, var(--sar)) calc(8px + var(--sab)) max(8px, var(--sal));
+    background: rgba(0, 0, 0, 0.92);
+    border-top: 1px solid var(--primary);
+}
+
+html.mobile .mobile-dock > button {
+    position: relative;
+    flex: none;
+    width: var(--dock-btn);
+    height: var(--dock-btn);
+    padding: 0;
+    margin: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-width: 2px;
+    border-radius: 0;
+    /* Chat / Options / Leave keep their text for screen readers; only the
+       icon is drawn. */
+    font-size: 0;
+    letter-spacing: 0;
+    gap: 0;
+}
+
+html.mobile .mobile-dock .ic-wrap {
+    width: auto;
+}
+
+html.mobile .mobile-dock .ic-wrap .ic,
+html.mobile .mobile-dock .control-btn .icon .ic,
+html.mobile .mobile-dock .waffle-icon {
+    width: 22px;
+    height: 22px;
+}
+
+html.mobile .mobile-dock .waffle-icon {
+    width: 18px;
+    height: 18px;
+}
+
+html.mobile .mobile-dock .notification-badge {
+    top: -7px;
+    right: -7px;
+    font-size: 11px;
+    letter-spacing: 0;
+}
+
+/* The local tile's own control strip is empty now -- its buttons are in the dock. */
+html.mobile #localContainer .video-controls {
+    display: none;
+}
+
+/* ── Video grid ─────────────────────────────────────────────────────────── */
+
+html.mobile .video-grid {
+    gap: 6px;
+    padding: 6px max(6px, var(--sar)) calc(var(--dock-h) + var(--sab) + 6px) max(6px, var(--sal));
+    align-items: stretch;
+    justify-items: stretch;
+    align-content: stretch;
+    grid-auto-rows: auto;
+}
+
+/* Portrait: stack before going side by side -- a phone is tall, not wide. */
+html.mobile .video-grid[data-participants="1"] {
+    grid-template-columns: 1fr;
+    grid-template-rows: 1fr;
+}
+
+html.mobile .video-grid[data-participants="2"] {
+    grid-template-columns: 1fr;
+    grid-template-rows: repeat(2, 1fr);
+}
+
+html.mobile .video-grid:is([data-participants="3"], [data-participants="4"]) {
+    grid-template-columns: repeat(2, 1fr);
+    grid-template-rows: repeat(2, 1fr);
+}
+
+html.mobile .video-grid:is([data-participants="5"], [data-participants="6"]) {
+    grid-template-columns: repeat(2, 1fr);
+    grid-template-rows: repeat(3, 1fr);
+}
+
+/* Past six, tiles that all fit would be too small to see anyone, so the grid
+   scrolls instead, with tiles at a fixed shape. */
+html.mobile .video-grid:is([data-participants="7"], [data-participants="8"], [data-participants="9"],
+    [data-participants="10"], [data-participants="11"], [data-participants="12"],
+    [data-participants="13"], [data-participants="14"], [data-participants="15"],
+    [data-participants="16"]) {
+    /* Flex rather than grid: in a grid, the inherited max-height:100% and
+       stretch alignment squash the rows back to fit and aspect-ratio is lost. */
+    --tile-cols: 2;
+    --tile-aspect: 3 / 4;
+    display: flex;
+    flex-wrap: wrap;
+    align-content: flex-start;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+}
+
+html.mobile .video-grid:is([data-participants="7"], [data-participants="8"], [data-participants="9"],
+    [data-participants="10"], [data-participants="11"], [data-participants="12"],
+    [data-participants="13"], [data-participants="14"], [data-participants="15"],
+    [data-participants="16"]) .video-container {
+    flex: none;
+    width: calc((100% - (var(--tile-cols) - 1) * 6px) / var(--tile-cols));
+    height: auto;
+    max-height: none;
+    aspect-ratio: var(--tile-aspect);
+}
+
+/* Spotlight fills the grid area rather than forcing 16:9 into a portrait slot.
+   Comes after the scrolling layout above so it wins at equal specificity. */
+html.mobile .video-grid.spotlight-mode {
+    display: flex;
+    flex-direction: column;
+    flex-wrap: nowrap;
+    overflow: hidden;
+}
+
+html.mobile .video-grid.spotlight-mode .spotlight-active {
+    flex: 1;
+    width: 100%;
+    aspect-ratio: auto;
+    height: 100%;
+    max-height: 100%;
+}
+
+/* Camera tiles are small and usually a different shape from the camera, so
+   fill them; screens and a spotlit tile show the whole frame. */
+html.mobile .video-container:not(.screen-tile) video {
+    object-fit: cover;
+}
+
+html.mobile .video-grid.spotlight-mode .spotlight-active video {
+    object-fit: contain;
+}
+
+/* ── Tiles ──────────────────────────────────────────────────────────────── */
+
+html.mobile .video-container {
+    border-width: 1px;
+}
+
+html.mobile .video-label {
+    bottom: 6px;
+    left: 6px;
+    max-width: calc(100% - 58px);
+    padding: 3px 8px;
+    font-size: 11px;
+    letter-spacing: 0.5px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+html.mobile .video-avatar {
+    width: 56px;
+    height: 56px;
+    font-size: 24px;
+    border-width: 2px;
+}
+
+html.mobile .muted-indicator {
+    bottom: 32px;
+    left: 6px;
+    padding: 2px 6px;
+    font-size: 12px;
+}
+
+html.mobile .signal-bars {
+    bottom: 6px;
+    right: 6px;
+    padding: 6px; /* a bigger tap target than the bars themselves */
+}
+
+html.mobile .signal-bars.show-tooltip .signal-tooltip {
+    opacity: 1;
+    visibility: visible;
+}
+
+html.mobile .disconnect-hud {
+    padding: 6px 10px;
+    font-size: 11px;
+    letter-spacing: 1px;
+    gap: 6px;
+}
+
+html.mobile .disconnect-hud-count {
+    padding-left: 6px;
+}
+
+html.mobile .tile-menu-btn {
+    position: absolute;
+    top: 6px;
+    right: 6px;
+    z-index: 6;
+    width: 36px;
+    height: 36px;
+    padding: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(0, 0, 0, 0.75);
+    border: 1px solid var(--primary);
+    color: var(--primary);
+    font-size: 20px;
+    cursor: pointer;
+}
+
+.tile-menu-btn {
+    display: none;
+}
+
+html.mobile .e2ee-banner {
+    top: 6px;
+    font-size: 10px;
+    padding: 3px 10px;
+}
+
+/* ── Tile action sheet ──────────────────────────────────────────────────── */
+
+/* The strip of buttons on each remote tile only appears as a sheet. */
+html.mobile .remote-audio-controls {
+    display: none;
+}
+
+/* Tiles are z-index:2 stacking contexts, so the sheet can only rise above the
+   dock and the backdrop if its tile does. */
+html.mobile .video-container.controls-open {
+    z-index: 1001;
+}
+
+html.mobile .video-container.controls-open .remote-audio-controls {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0;
+    position: fixed;
+    top: auto;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    max-width: 560px;
+    margin: 0 auto;
+    max-height: 80dvh;
+    overflow-y: auto;
+    padding: 0 0 var(--sab);
+    background: var(--darker);
+    border: none;
+    border-top: 2px solid var(--primary);
+    box-shadow: 0 -10px 30px rgba(0, 0, 0, 0.7);
+    opacity: 1;
+    cursor: default;
+    z-index: 20; /* over the tile's own overlays -- signal bars are 10, the HUD 11 */
+}
+
+html.mobile .controls-open .remote-audio-controls::before {
+    content: attr(data-sheet-title);
+    padding: 16px 18px 12px;
+    font-size: 14px;
+    font-weight: 700;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: var(--primary);
+    text-shadow: var(--glow);
+    border-bottom: 1px solid var(--primary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+html.mobile .controls-open .remote-audio-controls button {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    width: 100%;
+    min-height: 52px;
+    padding: 0 18px;
+    border: none;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    background: transparent;
+    color: var(--primary);
+    font-size: 20px;
+    text-align: left;
+}
+
+html.mobile .controls-open .remote-audio-controls button::after {
+    content: attr(title);
+    font-family: 'Courier New', monospace;
+    font-size: 15px;
+    font-weight: 700;
+}
+
+html.mobile .controls-open .remote-audio-controls button.muted {
+    color: var(--danger);
+}
+
+/* Destructive moderator actions read as such. */
+html.mobile .controls-open .remote-audio-controls button:is([data-mod-control="kick"], [data-mod-control="ban"]) {
+    color: var(--danger);
+}
+
+/* styles.css hides the slider on every touch screen; here there is room for it. */
+html.mobile .controls-open .remote-audio-controls input[type="range"] {
+    display: block;
+    order: 99;
+    width: auto;
+    height: 6px;
+    margin: 22px 18px;
+}
+
+html.mobile .controls-open .remote-audio-controls input[type="range"]::-webkit-slider-thumb {
+    width: 24px;
+    height: 24px;
+}
+
+html.mobile .controls-open .remote-audio-controls input[type="range"]::-moz-range-thumb {
+    width: 24px;
+    height: 24px;
+}
+
+/* iOS ignores HTMLMediaElement.volume, so the slider would do nothing there. */
+html.mobile.no-volume-control .remote-audio-controls input[type="range"] {
+    display: none !important;
+}
+
+.mobile-sheet-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 1000;
+    background: rgba(0, 0, 0, 0.55);
+}
+
+/* ── Chat ───────────────────────────────────────────────────────────────── */
+
+/* Sized off the visual viewport (set by initMobileLayout), so the input stays
+   above the on-screen keyboard instead of disappearing behind it. */
+html.mobile .chat-sidebar {
+    position: fixed;
+    left: 0;
+    right: 0;
+    top: var(--vv-top, 0px);
+    height: var(--vvh, 100dvh);
+    width: 100%;
+    max-width: none;
+    z-index: 150;
+    border-left: none;
+    box-shadow: none;
+    padding: var(--sat) var(--sar) 0 var(--sal);
+}
+
+html.mobile .chat-header {
+    padding: 8px 8px 8px 16px;
+}
+
+html.mobile #toggleChatBtn {
+    width: 44px;
+    height: 44px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 22px;
+}
+
+html.mobile .chat-input-container {
+    padding-bottom: calc(10px + var(--sab));
+}
+
+html.mobile .chat-input-row {
+    align-items: stretch;
+}
+
+html.mobile .chat-input-container input,
+html.mobile .chat-input-row .btn {
+    min-height: 44px;
+}
+
+html.mobile .chat-input-row .btn {
+    padding: 0 14px;
+    letter-spacing: 1px;
+}
+
+html.mobile .chat-attach-btn {
+    display: inline-flex;
+    flex: none;
+    width: 44px;
+    padding: 0 !important;
+    font-size: 20px;
+}
+
+html.mobile .chat-attach-btn .ic-wrap {
+    width: auto;
+}
+
+/* ── Options and changelog sheets ───────────────────────────────────────── */
+
+html.mobile .options-menu {
+    top: auto;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    transform: none;
+    width: 100%;
+    max-width: 560px;
+    margin: 0 auto;
+    max-height: 85vh;
+    max-height: 85dvh;
+    border-left: none;
+    border-right: none;
+    border-bottom: none;
+    border-radius: 0;
+    padding-bottom: var(--sab);
+}
+
+html.mobile .options-header {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    /* Tron forces it transparent (with !important); rows would scroll under it. */
+    background: var(--darker) !important;
+    padding: 8px 8px 8px 18px;
+}
+
+html.mobile .options-header .close-btn,
+html.mobile #closeChangelogBtn {
+    width: 44px;
+    height: 44px;
+    font-size: 20px;
+}
+
+html.mobile .options-item {
+    min-height: 48px;
+    height: auto;
+    font-size: 15px;
+}
+
+/* The share button is a tile control on desktop; in the sheet it needs a
+   label, and its title already tracks its state. */
+html.mobile .options-share-btn {
+    gap: 6px;
+}
+
+html.mobile .options-share-btn::after {
+    content: attr(title);
+}
+
+html.mobile .options-share-btn.active {
+    color: var(--danger);
+    border-color: var(--danger);
+}
+
+html.mobile .options-share-btn:disabled {
+    opacity: 0.4;
+}
+
+/* ── Toasts ─────────────────────────────────────────────────────────────── */
+
+html.mobile .hotmic-warning {
+    top: calc(8px + var(--sat));
+    width: calc(100vw - 16px);
+    padding: 8px 10px;
+    font-size: 13px;
+}
+
+html.mobile .restart-warning {
+    padding: calc(10px + var(--sat)) 12px 10px;
+    flex-wrap: wrap;
+    font-size: 13px;
+    gap: 6px;
+}
+
+/* ── Join and prejoin ───────────────────────────────────────────────────── */
+
+html.mobile .join-screen,
+html.mobile .prejoin-screen {
+    padding-left: max(12px, var(--sal));
+    padding-right: max(12px, var(--sar));
+    padding-bottom: calc(16px + var(--sab));
+}
+
+html.mobile .prejoin-controls .btn,
+html.mobile .prejoin-actions .btn,
+html.mobile .landing-join-btn {
+    min-height: 48px;
+}
+
+/* ── Landscape ──────────────────────────────────────────────────────────── */
+
+@media (orientation: landscape) {
+    /* Height is what a landscape phone has least of: the header collapses (it
+       still has to exist, the options sheet lives inside it) and the dock
+       becomes a rail down the right edge. */
+    html.mobile.in-call .header {
+        height: 0;
+        padding: 0;
+        border: none;
+        box-shadow: none;
+    }
+
+    html.mobile.in-call .header-banner {
+        display: none;
+    }
+
+    html.mobile .mobile-dock {
+        top: 0;
+        left: auto;
+        right: 0;
+        bottom: 0;
+        flex-direction: column;
+        width: auto;
+        --dock-btn: min(46px, 12vh);
+        gap: clamp(4px, 2vh, 12px);
+        padding: calc(8px + var(--sat)) max(8px, var(--sar)) calc(8px + var(--sab)) 8px;
+        border-top: none;
+        border-left: 1px solid var(--primary);
+    }
+
+    html.mobile .video-grid {
+        padding: calc(6px + var(--sat)) calc(min(46px, 12vh) + 16px + max(8px, var(--sar)) + 6px) calc(6px + var(--sab)) max(6px, var(--sal));
+    }
+
+    html.mobile .video-grid[data-participants="2"] {
+        grid-template-columns: repeat(2, 1fr);
+        grid-template-rows: 1fr;
+    }
+
+    html.mobile .video-grid:is([data-participants="5"], [data-participants="6"]) {
+        grid-template-columns: repeat(3, 1fr);
+        grid-template-rows: repeat(2, 1fr);
+    }
+
+    html.mobile .video-grid:is([data-participants="7"], [data-participants="8"], [data-participants="9"],
+        [data-participants="10"], [data-participants="11"], [data-participants="12"],
+        [data-participants="13"], [data-participants="14"], [data-participants="15"],
+        [data-participants="16"]) {
+        --tile-cols: 3;
+        --tile-aspect: 16 / 9;
+    }
+
+    /* The status pill must not sit under the rail. */
+    html.mobile.in-call .status-bar.error {
+        max-width: calc(100vw - 120px);
+    }
+}
+
+/* A landscape phone has ~360px of height: keep the prejoin preview from
+   pushing the Join button off the bottom. */
+@media (orientation: landscape) and (max-height: 500px) {
+    html.mobile .prejoin-screen {
+        align-items: flex-start;
+        padding-top: 8px;
+    }
+
+    html.mobile .prejoin-preview {
+        aspect-ratio: auto;
+        height: 38vh;
+        height: 38dvh;
+        margin: 8px 0;
+    }
+
+    html.mobile .prejoin-card h2 {
+        font-size: 15px;
+        margin-bottom: 4px;
+    }
+}
+
+/* Tablets have room for more than two columns. */
+@media (min-width: 700px) and (orientation: portrait) {
+    html.mobile .video-grid:is([data-participants="7"], [data-participants="8"], [data-participants="9"],
+        [data-participants="10"], [data-participants="11"], [data-participants="12"],
+        [data-participants="13"], [data-participants="14"], [data-participants="15"],
+        [data-participants="16"]) {
+        --tile-cols: 3;
+    }
+}

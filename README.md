@@ -532,6 +532,16 @@ pip install -r server/requirements.txt
 
 ## Recent Updates
 
+### v2.6 (2026-10-04)
+- **Slimmer header** — The header bar drops from about 100px to 57px by cropping the empty space inside the wordmark artwork. The join screen heading also stays reachable when the form is taller than the window
+- **Reconnecting reclaims your session** — A dropped socket used to stay in the room for up to 80s, holding your nick (so you came back renamed) and swallowing signaling meant for you. Registering again under the same client id now evicts the dead socket and keeps your role and presenter slot. The id survives a reload, per tab
+- **A congested relay no longer looks like someone dropping** — Brief ICE `disconnected` blips on a saturated path no longer put the DISCONNECTED HUD over the tile. It now waits for 4s of continuous disconnection, still ahead of the 6s ICE restart
+- **Third relay in Amsterdam** — Users near Europe get a nearby TURN server instead of crossing to the US. A relay that is unreachable when you join is no longer cached as last for the whole tab session, so it gets picked again once it is back
+- **The header logo glitches constantly** — 13 scanline bands now tear on their own short cycles, instead of the wordmark glitching in two short bursts. It still holds still under reduced motion
+- **Mobile layout** — Phones and tablets get their own layout. The mic, camera, flip-camera, chat, options and leave buttons sit in a bottom dock, or a right-hand rail in landscape. The video grid fits the visible screen in both orientations and scrolls past six people. Each tile has a `⋯` sheet with mute, hide video, volume (not on iOS, which ignores it) and every moderator action. Chat opens full screen and stays above the keyboard; options open as a bottom sheet. Screen share is hidden where the browser can't share a screen. Force a layout with `?layout=mobile` or `?layout=desktop`
+- **Mobile extras** — Front/back camera flip, a screen wake lock during calls, automatic recovery when iOS kills the camera or mic while you are in another app, and a photo picker in chat
+- **Device switches respect mute** — Changing camera or microphone while muted or with the camera off no longer turns it back on
+
 ### v2.5 (2026-09-08)
 - **Moderators can stop a screen share** — A mod or the owner can end someone else's share from the sharer's camera tile or their screen tile, without kicking them. The owner can stop anyone; a co-mod can stop anyone but the owner. One-shot, not a block — the user can start a new share right away
 - **New glitch-cyberpunk logo** — The header wordmark is now drawn artwork with a chromatic split and torn scanlines, glitching briefly every few seconds. It recolours with the active theme, and holds still for anyone who has asked their OS to reduce motion

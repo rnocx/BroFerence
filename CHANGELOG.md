@@ -8,6 +8,70 @@ Versions match the number shown in the app footer and in `README.md`.
 
 ---
 
+## v2.6 — 2026-10-04
+
+- **The header bar is about 40% shorter.** Most of its height was empty space inside the
+  artwork's viewBox rather than padding. Cropping the viewBox to the letterforms takes the bar
+  from roughly 100px to 57px. `sync-logo.py` matches on the new viewBox.
+- **The join screen heading stays reachable.** When the form was taller than the window, centring
+  pushed the top of it under the header where it could not be scrolled to. It now uses
+  `align-items: safe center`.
+- **A reconnecting user reclaims their session.** A dropped socket stays registered for up to
+  `ping_interval + ping_timeout` (80s). Until then it held the user's nick, so they came back
+  renamed, and `relay_to_peer()` sent their signaling to the dead socket. A register under a
+  clientId that is already connected now evicts the old socket without the leave path, so the
+  owner role, the presenter slot and the room survive the gap. A delayed sweep removes a room
+  that an eviction emptied and nobody returns to. The client keeps its id in `sessionStorage`, so
+  a reload counts as the same session; two tabs are still two participants.
+- **A congested relay no longer reads as a peer dropping repeatedly.** On a saturated path ICE
+  flips to `disconnected` for a second or two several times a minute and recovers on its own.
+  The disconnect HUD now waits for 4s of continuous disconnection, still ahead of the 6s ICE
+  restart. `failed` stays immediate.
+- **A third relay, in Amsterdam.** It is added to the probe list and both ICE arrays. The deploy
+  writes a third `allowed-peer-ip` line on the primary, and its credential comes from `.env` as
+  `TURN3_PASSWORD`.
+- **A relay outage no longer pins someone to a distant relay for the whole session.** The relay
+  order is only cached in the tab when every relay answered the probe. A partial result still
+  decides the current join but is not written, so the next join probes again.
+- **The header logo tears all the time.** 13 independent scanline bands now run on their own
+  short cycles with larger throws and a constant sub-pixel jitter, instead of two short bursts
+  with three wide slices. All of it is still off under `prefers-reduced-motion`.
+- **Mobile layout for phones and tablets.** Touch-first devices get `html.mobile`, detected by
+  user agent (including iPadOS, which reports itself as a Mac) or a coarse, hover-less pointer.
+  `?layout=mobile|desktop` forces a layout and is remembered; `?layout=auto` clears it. The layout
+  lives in `client/mobile.css`, scoped entirely under that class, so desktop is unchanged.
+  Existing buttons are moved rather than duplicated, so every handler and every by-id state update
+  keeps working.
+  - Mic, camera, flip camera, chat, options and leave sit in a bottom dock, which becomes a rail
+    on the right in landscape, where the header also collapses. The old fixed bar lived inside
+    the local tile and vanished whenever another tile was spotlit.
+  - The page uses `100dvh` and `viewport-fit=cover`, so it fits the visible height and clears the
+    notch and home indicator.
+  - Portrait grid: 1 fills the screen, 2 stack, then 2×2 and 2×3. Landscape: side by side, 2×2,
+    3×2. Past six people the grid scrolls with fixed-shape tiles. Camera tiles crop to fill;
+    screen tiles and the spotlit tile show the whole frame.
+  - Each remote tile and screen tile gets a `⋯` button that opens its existing control strip as a
+    labelled bottom sheet. Mute, hide video, volume and every moderator button appear there,
+    including ones added later by `refreshModeratorControls()`. The volume row is hidden where
+    `HTMLMediaElement.volume` is read-only (iOS). Tapping the signal bars shows the stats tooltip
+    without spotlighting the tile.
+  - Chat is a full-screen sheet sized from `visualViewport`, so its input stays above the
+    on-screen keyboard. Options and the changelog open as bottom sheets. Lock Room and Share
+    Screen move into Options; Share Screen is dropped where `getDisplayMedia` does not exist. The
+    Video Quality row is hidden because mobile ignores it.
+  - While connected, the status bar is hidden; on error it shows as a pill at the top.
+- **Mobile extras.**
+  - Flip between front and back camera. The old track is stopped first because iOS cannot open
+    two cameras at once, and the previous camera is reopened if the switch fails.
+  - A Screen Wake Lock is held during a call and re-acquired when the tab comes back.
+  - When the tab becomes visible again, a camera or mic track that iOS ended while another app
+    was in front is reopened and swapped onto every connection.
+  - A photo picker in chat feeds the existing image path, since phones cannot practically paste
+    an image.
+- **Device switches respect mute.** Camera switching now goes through one
+  `replaceLocalVideoTrack()`, which keeps a camera the user turned off turned off. The microphone
+  switch does the same for mute. Both used to turn the new device on silently.
+
 ## v2.5 — 2026-09-08
 
 - **Moderators and the owner can stop someone else's screen share.** Until now a share could only

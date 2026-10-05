@@ -1078,6 +1078,313 @@ document.getElementById('chatToggleBtn').addEventListener('click', () => this.to
             gravatarInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') applyGravatar(); });
         }
 
+        // Chat image picker -- pasting is the desktop route, but a phone has no
+        // practical way to paste an image, so it gets a file picker instead.
+        const chatImageInput = document.getElementById('chatImageInput');
+        document.getElementById('chatAttachBtn').addEventListener('click', () => chatImageInput.click());
+        chatImageInput.addEventListener('change', () => {
+            const file = chatImageInput.files && chatImageInput.files[0];
+            if (file && file.type.startsWith('image/')) this.handleImagePaste(file);
+            chatImageInput.value = '';  // picking the same photo twice must fire change again
+        });
+
+        this.initMobileLayout();
+    }
+
+    // ── Mobile layout ──────────────────────────────────────────────────────
+    // Phones and tablets run the same app with `html.mobile` set: mobile.css
+    // does the layout, and a handful of existing nodes are moved into a bottom
+    // dock. Moving rather than duplicating keeps every listener and every
+    // getElementById state update working exactly as on desktop.
+
+    isTouchFirst() {
+        return this.isMobileDevice() ||
+            window.matchMedia('(hover: none) and (pointer: coarse)').matches;
+    }
+
+    // ?layout=mobile|desktop forces a layout (and is remembered) so it can be
+    // tested from a desktop browser or escaped on a device that guesses wrong;
+    // ?layout=auto forgets the override.
+    resolveMobileLayout() {
+        const param = new URLSearchParams(window.location.search).get('layout');
+        try {
+            if (param === 'mobile' || param === 'desktop') localStorage.setItem('broference-layout', param);
+            else if (param === 'auto') localStorage.removeItem('broference-layout');
+        } catch (_e) { /* storage blocked -- the param still applies to this load */ }
+        let forced = param === 'mobile' || param === 'desktop' ? param : null;
+        if (!forced) {
+            try { forced = localStorage.getItem('broference-layout'); } catch (_e) { forced = null; }
+        }
+        if (forced === 'mobile') return true;
+        if (forced === 'desktop') return false;
+        return this.isTouchFirst();
+    }
+
+    initMobileLayout() {
+        this.isMobileLayout = this.resolveMobileLayout();
+        if (!this.isMobileLayout) return;
+
+        document.documentElement.classList.add('mobile');
+        this.facingMode = 'user';
+        this.wakeLock = null;
+
+        // iOS ignores writes to HTMLMediaElement.volume (it always reads back 1),
+        // so a volume slider there would be a control that does nothing.
+        const probe = document.createElement('video');
+        probe.volume = 0.5;
+        if (probe.volume !== 0.5) document.documentElement.classList.add('no-volume-control');
+
+        // Dock: mic, camera, flip, chat, options, leave.
+        const dock = document.createElement('div');
+        dock.id = 'mobileDock';
+        dock.className = 'mobile-dock';
+
+        const flipBtn = document.createElement('button');
+        flipBtn.id = 'flipCameraBtn';
+        flipBtn.className = 'control-btn';
+        flipBtn.title = 'Flip camera';
+        flipBtn.hidden = true;  // until we know there is a second camera
+        flipBtn.innerHTML = '<span class="icon" data-icon="camera-flip"></span>';
+        flipBtn.addEventListener('click', () => this.flipCamera());
+
+        dock.append(
+            document.getElementById('toggleAudioBtn'),
+            document.getElementById('toggleVideoBtn'),
+            flipBtn,
+            document.getElementById('chatToggleBtn'),
+            document.getElementById('optionsBtn'),
+            document.getElementById('leaveRoomHeaderBtn')
+        );
+        this.conferenceScreen.appendChild(dock);
+        hydrateIcons(dock);
+
+        // Screen share and room lock live in the options sheet. Neither fits in
+        // a dock a phone's width wide, and both are used far less than mute.
+        const optionsList = document.querySelector('#optionsMenu .options-list');
+        const inviteBtn = document.getElementById('inviteLinkBtn');
+        const closeOptionsIfOpen = () => {
+            if (!document.getElementById('optionsMenu').classList.contains('hidden')) this.toggleOptionsMenu();
+        };
+
+        const shareBtn = document.getElementById('shareScreenBtn');
+        if (navigator.mediaDevices && navigator.mediaDevices.getDisplayMedia) {
+            shareBtn.className = 'options-item options-share-btn';
+            optionsList.insertBefore(shareBtn, inviteBtn);
+            shareBtn.addEventListener('click', closeOptionsIfOpen);
+        } else {
+            // iOS and most mobile browsers cannot capture the screen at all.
+            // Kept in the DOM (detached) because the presenter code updates it by id.
+            shareBtn.hidden = true;
+            optionsList.appendChild(shareBtn);
+        }
+
+        const lockBtn = document.getElementById('lockRoomBtn');
+        lockBtn.className = 'options-item';
+        optionsList.insertBefore(lockBtn, inviteBtn);
+        lockBtn.addEventListener('click', closeOptionsIfOpen);
+
+        // Quality is fixed on mobile (see getVideoConstraints), so the selector
+        // would be a setting that silently does nothing.
+        const qualityRow = document.getElementById('videoQualitySelect').closest('.options-item');
+        if (qualityRow) qualityRow.classList.add('desktop-only');
+
+        // Shared backdrop for the per-tile action sheets.
+        this.tileSheetBackdrop = document.createElement('div');
+        this.tileSheetBackdrop.className = 'mobile-sheet-backdrop hidden';
+        this.tileSheetBackdrop.addEventListener('click', () => this.closeTileMenu());
+        document.body.appendChild(this.tileSheetBackdrop);
+
+        // Signal stats are a hover tooltip on desktop. Capture phase so the tap
+        // is stopped before it reaches the tile and toggles spotlight.
+        this.videoGrid.addEventListener('click', (e) => {
+            const bars = e.target.closest('.signal-bars');
+            if (!bars) return;
+            e.stopPropagation();
+            const wasOpen = bars.classList.contains('show-tooltip');
+            this.videoGrid.querySelectorAll('.signal-bars.show-tooltip')
+                .forEach(b => b.classList.remove('show-tooltip'));
+            if (!wasOpen) bars.classList.add('show-tooltip');
+        }, true);
+
+        // The on-screen keyboard shrinks the visual viewport but not the layout
+        // viewport, so the chat sheet sizes itself from this to keep its input
+        // above the keyboard.
+        const vv = window.visualViewport;
+        const syncViewport = () => {
+            const root = document.documentElement.style;
+            root.setProperty('--vvh', `${vv ? vv.height : window.innerHeight}px`);
+            root.setProperty('--vv-top', `${vv ? vv.offsetTop : 0}px`);
+        };
+        syncViewport();
+        if (vv) {
+            vv.addEventListener('resize', syncViewport);
+            vv.addEventListener('scroll', syncViewport);
+        }
+        window.addEventListener('resize', syncViewport);
+
+        if (navigator.mediaDevices && navigator.mediaDevices.addEventListener) {
+            navigator.mediaDevices.addEventListener('devicechange', () => this.updateFlipCameraButton());
+        }
+
+        // Returning to the tab: the wake lock is always dropped while hidden, and
+        // iOS may have killed the camera/mic while another app was in front.
+        document.addEventListener('visibilitychange', () => {
+            if (document.visibilityState !== 'visible' || !this.currentRoom) return;
+            this.requestWakeLock();
+            this.recoverEndedLocalTracks();
+            // Track state can settle a beat after the page comes back.
+            setTimeout(() => this.recoverEndedLocalTracks(), 1000);
+        });
+    }
+
+    // Called once the room is joined: the call is live, so keep the screen on.
+    onMobileCallStarted() {
+        if (!this.isMobileLayout) return;
+        this.requestWakeLock();
+        this.updateFlipCameraButton();
+    }
+
+    onMobileCallEnded() {
+        if (!this.isMobileLayout) return;
+        this.closeTileMenu();
+        if (this.wakeLock) {
+            this.wakeLock.release().catch(() => {});
+            this.wakeLock = null;
+        }
+    }
+
+    // A phone that dims and locks mid-call stops the camera and, on iOS, can
+    // suspend the page outright.
+    async requestWakeLock() {
+        if (!this.isMobileLayout || !('wakeLock' in navigator)) return;
+        if (this.wakeLock || !this.currentRoom || document.visibilityState !== 'visible') return;
+        try {
+            this.wakeLock = await navigator.wakeLock.request('screen');
+            this.wakeLock.addEventListener('release', () => { this.wakeLock = null; });
+        } catch (error) {
+            console.warn('Screen wake lock unavailable:', error);
+        }
+    }
+
+    async updateFlipCameraButton() {
+        const btn = document.getElementById('flipCameraBtn');
+        if (!btn || !navigator.mediaDevices?.enumerateDevices) return;
+        try {
+            const devices = await navigator.mediaDevices.enumerateDevices();
+            btn.hidden = devices.filter(d => d.kind === 'videoinput').length < 2;
+        } catch (_e) {
+            btn.hidden = true;
+        }
+        btn.disabled = !this.hasLocalTrack('video');
+    }
+
+    async flipCamera() {
+        const oldTrack = this.localStream?.getVideoTracks()[0];
+        if (!oldTrack) {
+            this.addChatMessage('System', this.mediaNotice || 'No camera available — others cannot see you.', true);
+            return;
+        }
+        if (this.flippingCamera) return;
+        this.flippingCamera = true;
+
+        const next = this.facingMode === 'environment' ? 'user' : 'environment';
+        const base = { ...this.getVideoConstraints() };
+        delete base.facingMode;
+        const acquire = async (mode) => {
+            const stream = await navigator.mediaDevices.getUserMedia({ video: { ...base, facingMode: { exact: mode } } });
+            return stream.getVideoTracks()[0];
+        };
+
+        // iOS cannot hold two cameras open at once, so the old one has to go
+        // before the new one is requested.
+        oldTrack.stop();
+        let newTrack = null;
+        try {
+            newTrack = await acquire(next);
+            this.facingMode = next;
+        } catch (error) {
+            console.warn('Could not switch camera, reopening the previous one:', error);
+            try {
+                newTrack = await acquire(this.facingMode);
+            } catch (reopenError) {
+                console.error('Could not reopen the camera:', reopenError);
+                this.addChatMessage('System', 'The camera could not be reopened. Toggle it off and on, or rejoin.', true);
+            }
+        }
+        if (newTrack) this.replaceLocalVideoTrack(newTrack);
+        this.flippingCamera = false;
+    }
+
+    // iOS ends the camera and mic when another app takes them over (a phone
+    // call, the camera app). Coming back to a dead track would leave everyone
+    // else looking at a frozen frame, so reopen whatever ended.
+    async recoverEndedLocalTracks() {
+        if (!this.localStream || this.recoveringTracks) return;
+        this.recoveringTracks = true;
+        try {
+            const videoTrack = this.localStream.getVideoTracks()[0];
+            if (videoTrack && videoTrack.readyState === 'ended') {
+                console.warn('Local camera track ended while in the background — reopening');
+                const base = { ...this.getVideoConstraints() };
+                const stream = await navigator.mediaDevices.getUserMedia({
+                    video: { ...base, facingMode: { ideal: this.facingMode || 'user' } }
+                });
+                this.replaceLocalVideoTrack(stream.getVideoTracks()[0]);
+            }
+
+            const audioTrack = this.localStream?.getAudioTracks()[0];
+            if (audioTrack && audioTrack.readyState === 'ended') {
+                console.warn('Local microphone track ended while in the background — reopening');
+                let deviceId = audioTrack.getSettings?.().deviceId;
+                if (!deviceId) {
+                    const devices = await navigator.mediaDevices.enumerateDevices();
+                    deviceId = devices.find(d => d.kind === 'audioinput')?.deviceId;
+                }
+                if (deviceId) await this.switchMicrophone(deviceId);
+            }
+        } catch (error) {
+            console.error('Could not recover local media after backgrounding:', error);
+        } finally {
+            this.recoveringTracks = false;
+        }
+    }
+
+    // Per-tile actions. A tap on a tile already means "spotlight", so the
+    // controls open from a small menu button instead, and mobile.css turns the
+    // tile's existing control strip into a bottom sheet. Every button in it --
+    // including moderator buttons added later by refreshModeratorControls() --
+    // shows up with its title as the label, without a second copy of any of it.
+    attachTileMenu(container, controlsDiv) {
+        if (!this.isMobileLayout || !controlsDiv) return;
+
+        const menuBtn = document.createElement('button');
+        menuBtn.className = 'tile-menu-btn';
+        menuBtn.title = 'Actions';
+        setIcon(menuBtn, 'more');
+        menuBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            this.openTileMenu(container, controlsDiv);
+        });
+        container.appendChild(menuBtn);
+
+        // Any action closes the sheet; the volume slider does not, so it can be dragged.
+        controlsDiv.addEventListener('click', (e) => {
+            if (e.target.closest('button')) this.closeTileMenu();
+        });
+    }
+
+    openTileMenu(container, controlsDiv) {
+        this.closeTileMenu();
+        const label = container.querySelector('.video-label');
+        controlsDiv.dataset.sheetTitle = label ? label.textContent.trim() : '';
+        container.classList.add('controls-open');
+        this.tileSheetBackdrop.classList.remove('hidden');
+    }
+
+    closeTileMenu() {
+        document.querySelectorAll('.video-container.controls-open')
+            .forEach(c => c.classList.remove('controls-open'));
+        if (this.tileSheetBackdrop) this.tileSheetBackdrop.classList.add('hidden');
     }
 
     handleInviteLink() {
@@ -1425,7 +1732,9 @@ document.getElementById('chatToggleBtn').addEventListener('click', () => this.to
 
                 // Show control buttons in header
                 document.getElementById('bottomControls').style.display = 'flex';
+                document.documentElement.classList.add('in-call');
                 this.updateLockButton();
+                this.onMobileCallStarted();
 
                 // Create peer connections for existing users.
                 // Skip peers that are already connected (e.g. after a WS reconnect —
@@ -1841,7 +2150,11 @@ document.getElementById('chatToggleBtn').addEventListener('click', () => this.to
     }
 
     isMobileDevice() {
-        return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+        const ua = navigator.userAgent;
+        if (/Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(ua)) return true;
+        // iPadOS 13+ asks for the desktop site and reports itself as a Mac; the
+        // touch points are the only thing that gives it away.
+        return /Macintosh/.test(ua) && navigator.maxTouchPoints > 1;
     }
 
     getVideoConstraints() {
@@ -3526,6 +3839,7 @@ document.getElementById('chatToggleBtn').addEventListener('click', () => this.to
 
         // Add click handler for spotlight mode
         this.sealControls(audioControls);
+        this.attachTileMenu(container, audioControls);
         container.addEventListener('click', () => {
             this.toggleSpotlight(`video-${peerId}`);
         });
@@ -4811,6 +5125,7 @@ document.getElementById('chatToggleBtn').addEventListener('click', () => this.to
             }
             container.appendChild(screenControls);
             this.sealControls(screenControls);
+            this.attachTileMenu(container, screenControls);
         }
         container.appendChild(labelEl);
 
@@ -4971,6 +5286,8 @@ document.getElementById('chatToggleBtn').addEventListener('click', () => this.to
             videoBtn.disabled = !hasCam;
             videoBtn.title = hasCam ? 'Toggle camera' : 'No camera available';
         }
+        const flipBtn = document.getElementById('flipCameraBtn');
+        if (flipBtn) flipBtn.disabled = !this.hasLocalTrack('video');
     }
 
     toggleAudio() {
@@ -5247,37 +5564,45 @@ document.getElementById('chatToggleBtn').addEventListener('click', () => this.to
             const constraints = { ...this.getVideoConstraints(), deviceId: { exact: deviceId } };
             const newStream = await navigator.mediaDevices.getUserMedia({ video: constraints });
             const newVideoTrack = newStream.getVideoTracks()[0];
-
-            const oldVideoTrack = this.localStream?.getVideoTracks()[0];
-            if (oldVideoTrack) {
-                oldVideoTrack.stop();
-                this.localStream.removeTrack(oldVideoTrack);
-            }
-            this.localStream.addTrack(newVideoTrack);
-
-            // Update local video preview
-            if (this.localVideo) this.localVideo.srcObject = this.localStream;
-
-            // Replace track in all peer connections
-            this.peerConnections.forEach(peer => {
-                const sender = peer.connection.getSenders().find(s => s.track && s.track.kind === 'video');
-                if (sender) sender.replaceTrack(newVideoTrack);
-            });
-
-            // A camera we did not have when we joined has no sender to swap into:
-            // that m-line was negotiated receive-only and this mesh has no
-            // renegotiation path. Better to say so than to show a local preview
-            // that nobody else is receiving.
-            if (!oldVideoTrack && this.peerConnections.size > 0) {
-                this.addChatMessage('System', 'Camera connected. Rejoin the room for others to see it.', true);
-            }
-            this.syncDeviceControlAvailability();
+            this.replaceLocalVideoTrack(newVideoTrack);
 
             localStorage.setItem('broference-preferred-camera', deviceId);
             console.log('Switched camera to:', newVideoTrack.label);
         } catch (error) {
             console.error('Error switching camera:', error);
         }
+    }
+
+    // Swap a new camera track in for the current one, locally and on every
+    // peer connection. Shared by the device picker, the mobile flip button and
+    // the post-background recovery.
+    replaceLocalVideoTrack(newVideoTrack) {
+        const oldVideoTrack = this.localStream?.getVideoTracks()[0];
+        if (oldVideoTrack) {
+            oldVideoTrack.stop();
+            this.localStream.removeTrack(oldVideoTrack);
+            // A fresh track starts enabled; a camera the user turned off must stay off.
+            newVideoTrack.enabled = this.videoEnabled;
+        }
+        this.localStream.addTrack(newVideoTrack);
+
+        // Update local video preview
+        if (this.localVideo) this.localVideo.srcObject = this.localStream;
+
+        // Replace track in all peer connections
+        this.peerConnections.forEach(peer => {
+            const sender = peer.connection.getSenders().find(s => s.track && s.track.kind === 'video');
+            if (sender) sender.replaceTrack(newVideoTrack);
+        });
+
+        // A camera we did not have when we joined has no sender to swap into:
+        // that m-line was negotiated receive-only and this mesh has no
+        // renegotiation path. Better to say so than to show a local preview
+        // that nobody else is receiving.
+        if (!oldVideoTrack && this.peerConnections.size > 0) {
+            this.addChatMessage('System', 'Camera connected. Rejoin the room for others to see it.', true);
+        }
+        this.syncDeviceControlAvailability();
     }
 
     async updatePrejoinDeviceLists(stream) {
@@ -5380,6 +5705,9 @@ document.getElementById('chatToggleBtn').addEventListener('click', () => this.to
                 const audioBtn = document.getElementById('toggleAudioBtn');
                 audioBtn.classList.remove('active');
                 setIcon(audioBtn.querySelector('.icon'), 'mic');
+            } else {
+                // A fresh track starts enabled; a mic the user muted must stay muted.
+                newAudioTrack.enabled = this.audioEnabled;
             }
 
             // Re-wire audio chain with the new source track (handles NS state automatically)
@@ -5674,6 +6002,13 @@ document.getElementById('chatToggleBtn').addEventListener('click', () => this.to
             !this.videoGrid.querySelector('.spotlight-active')) {
             this.exitSpotlight();
         }
+
+        // Same for an open action sheet whose tile just went away: the backdrop
+        // would otherwise sit over the whole call with nothing to dismiss.
+        if (this.tileSheetBackdrop && !this.tileSheetBackdrop.classList.contains('hidden') &&
+            !document.querySelector('.video-container.controls-open')) {
+            this.closeTileMenu();
+        }
     }
 
     // Drop spotlight mode and put every tile back in the grid.
@@ -5925,6 +6260,8 @@ document.getElementById('chatToggleBtn').addEventListener('click', () => this.to
         this.conferenceScreen.style.display = 'none';
         document.getElementById('roomInfo').style.display = 'none';
         document.getElementById('bottomControls').style.display = 'none';
+        document.documentElement.classList.remove('in-call');
+        this.onMobileCallEnded();
         this.chatMessages.innerHTML = '';
 
         // Reset audio/video enabled states
