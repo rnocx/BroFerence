@@ -1048,7 +1048,7 @@ document.getElementById('chatToggleBtn').addEventListener('click', () => this.to
         const themeSelect = document.getElementById('themeSelect');
         if (themeSelect) {
             // Load saved theme
-            const savedTheme = localStorage.getItem('broference-theme') || 'tron';
+            const savedTheme = localStorage.getItem('broference-theme') || 'breach';
             this.setTheme(savedTheme);
             themeSelect.value = savedTheme;
 
